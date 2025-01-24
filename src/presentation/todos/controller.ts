@@ -1,82 +1,72 @@
 import { Request, Response } from 'express';
-
-const todos = [
-    {id: 1, text: 'Buy Milk', completedAt: new Date()},
-    {id: 2, text: 'Buy Bread', completedAt: null},
-    {id: 3, text: 'Buy Butter', completedAt: new Date()},
-];
+import { CreateTodoDto, UpdateTodoDto } from '../../domain/dtos';
+import { CreateTodo, CustomError, DeleteTodo, GetTodo, GetTodos, TodoRepository, UpdateTodo } from '../../domain';
 
 export class TodosController {
     //* DI - Dependency Injection
-    constructor(){}
+    constructor(
+        private readonly todoRepository: TodoRepository
+    ){}
+
+    private handleError = (response: Response, error: unknown) => {
+        if(error instanceof CustomError){
+            response.status(error.statusCode).json({error: error.message});
+            return;
+        }
+        response.status(500).json({error: 'Internal Server Error'});
+    }
 
     public getTodos = (req: Request, res: Response) => {
-        res.json(todos);
+        new GetTodos(this.todoRepository)
+        .execute()
+        .then(todos => res.json(todos))
+        .catch(error => this.handleError(res, error));
         return;
     }
 
     public getTodoById = (req: Request, res: Response) => {
         const id = +req.params.id;
-        if (isNaN(id)) {
-            res.status(400).json({error: 'ID argument is not a number'});
-            return;
-        }
-        const todo = todos.find(todo => todo.id === id);
-        (todo) ? 
-        res.json(todo)
-        : res.status(404).json({error: `Todo with id ${id} not found`});
+        new GetTodo(this.todoRepository)
+        .execute(id)
+        .then(todo => res.json(todo))
+        .catch(error => this.handleError(res, error));
         return;
     };
 
     public createTodo = (req: Request, res: Response) => {
-        const { text } = req.body;
-        if (!text){
-            res.status(400).json({error: 'Text is required'});
+        const [error, createTodoDto] = CreateTodoDto.create(req.body);
+        if (error){
+            res.status(400).json({error});
             return;
         }
-            const body = req.body;
-        const newTodo = {
-            id: todos.length + 1,
-            text: text,
-            completedAt: new Date()
-        };
-        todos.push(newTodo);
-        res.json(newTodo);
+        new CreateTodo(this.todoRepository)
+        .execute(createTodoDto!)
+        .then(todo => res.status(201).json(todo))
+        .catch(error => this.handleError(res, error));
     }
 
     public updateTodo = (req: Request, res: Response) => {
         const id = +req.params.id;
-        if (isNaN(id)){
-            res.status(400).json({error: 'ID argument is not a number'});
+        const [error, updateTodoDto] = UpdateTodoDto.create({...req.body, id});
+        if (error){
+            res.status(400).json({error});
             return;
         }
-        const todo = todos.find(todo => todo.id === id);
-        if (!todo){
-            res.status(404).json({error: `Todo with id ${id} not found`});
-            return;
-        }
-       const {text, completedAt} = req.body;
-       (completedAt)
-       ? todo.completedAt = null 
-       : todo.completedAt = new Date(completedAt || todo.completedAt);
-
-       todo.text = text || todo.text;
-        res.json(todo);
+        
+        new UpdateTodo(this.todoRepository)
+        .execute(updateTodoDto!)
+        .then(todo => res.json(todo))
+        .catch(error => this.handleError(res, error));
+        return;
     }
 
     public deleteTodo = (req: Request, res: Response) => {
         const id = +req.params.id;
-        if (isNaN(id)){
-            res.status(400).json({error: 'ID argument is not a number'});
-            return;
-        }
-        const todoIndex = todos.findIndex(todo => todo.id === id);
-        if (todoIndex === -1){
-            res.status(404).json({error: `Todo with id ${id} not found`});
-            return;
-        }
-        const todo = todos[todoIndex];
-        todos.splice(todoIndex, 1);
-        res.json(todo);
+       
+        new DeleteTodo(this.todoRepository)
+        .execute(id)
+        .then(todo => res.json(todo))
+        .catch(error => this.handleError(res, error));
+        return;
     }
 }
